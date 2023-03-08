@@ -22,8 +22,12 @@ import (
 var userCollection *mongo.Collection = database.OpenCollection(database.Client, "user")
 var validate = validator.New()
 
-func HashPassword() {
-
+func hashPassword(password string) string {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	if err != nil {
+		log.Panic(err)
+	}
+	return string(hashedPassword)
 }
 
 func verifyPassword(userPassword string, providedPassword string) (bool, string) {
@@ -64,6 +68,9 @@ func SignUp() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error checking email"})
 			return
 		}
+
+		password := hashPassword(*user.Password)
+		user.Password = &password
 
 		countPhone, err := userCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
 		defer cancel()
@@ -128,6 +135,34 @@ func LogIn() gin.HandlerFunc {
 
 		isPasswordValid, msg := verifyPassword(*user.Password, *foundUser.Password)
 		defer cancel()
+		if isPasswordValid != true {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+			return
+		}
+
+		if foundUser.Email == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found"})
+			return
+		}
+
+		token, refreshToken, err := helper.GenerateAllTokens(
+			*foundUser.Email,
+			*foundUser.First_name,
+			*foundUser.Last_name,
+			*foundUser.User_type,
+			foundUser.User_id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		helper.UpdateAllTokens(token, refreshToken, foundUser.User_id)
+
+		err = userCollection.FindOne(ctx, bson.M{"user_id": foundUser.User_id}).Decode(&foundUser)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, foundUser)
 
 	}
 
