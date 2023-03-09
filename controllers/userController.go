@@ -163,8 +163,8 @@ func LogIn() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, foundUser)
 
+		c.JSON(http.StatusOK, foundUser)
 	}
 
 }
